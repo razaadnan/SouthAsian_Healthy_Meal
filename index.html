@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Personalized Nutrition Plan & Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- 
+    Chosen Palette: Slate & Amber
+    Application Structure Plan: This is a single-page dashboard. The top section contains the user's core nutritional targets and a dynamic progress summary for the selected day, including a macro-split spider chart for individual meals. Below this, a 7-day navigation bar allows the user to switch between days. The main content area dynamically displays the meal options for the selected day, categorized into Breakfast, Lunch, and Dinner. Each meal is a "card" with an "Add to Log" button. Clicking this button updates the progress summary in real-time. Additionally, clicking any meal card updates the spider chart to show that meal's macros. This structure was chosen to provide an immediate, interactive overview (the dashboard) and an easy way to explore and log daily meals without leaving the page, which is ideal for quick, consistent tracking and detailed meal analysis.
+    Visualization & Content Choices: 
+    - Daily Targets: Presented as clear, static cards (Goal: Inform).
+    - Daily Progress: Uses dynamic progress bars (Goal: Compare, Inform). This gives instant visual feedback on consumption vs. goals. Interaction: Updates on button click.
+    - Meal-specific Macro Breakdown: Uses a Chart.js spider (radar) chart (Goal: Compare, Inform). This visually represents the macro balance of individual meals. Interaction: Updates dynamically when a meal card is clicked or a meal is added to the log.
+    - Meal Plan: An interactive card-based layout (Goal: Organize, Inform). Each card contains meal details and macros. Interaction: A button on each card ("Add to Log") triggers a JS function to update the daily totals. Clicking the card itself updates the spider chart.
+    - Tactical Tips: Presented in an accordion-style section for clean, organized access to supplementary information (Goal: Inform).
+    - LLM Integration (Meal Idea Generator): A button triggers an API call to Gemini to generate a new meal idea, displayed in a distinct card. (Goal: Engage, Inform, Generate)
+    - LLM Integration (Sweet Treat Suggestor): A button triggers an API call to Gemini to generate a calorie-conscious sweet treat idea. (Goal: Engage, Inform, Generate)
+    - Target Calculator: Section for user input (age, height, weight, activity) to dynamically calculate BMR, TDEE, and fat loss targets. (Goal: Inform, Personalize)
+    - Weekly Weight Loss Projection: Displays estimated weight loss based on calculated deficit. (Goal: Inform, Motivate)
+    - Google AdSense Component: Placeholder for monetizing the webpage.
+    - CONFIRMATION: NO SVG graphics used. NO Mermaid JS used.
+    -->
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .progress-bar-fill { transition: width 0.5s ease-in-out; }
+        .day-btn.active { background-color: #f59e0b; color: white; }
+        .chart-container { 
+            position: relative; 
+            width: 100%; 
+            max-width: 250px; /* Adjusted max-width for radar chart */
+            margin-left: auto; 
+            margin-right: auto; 
+            height: 250px; /* Adjusted height for radar chart */
+            max-height: 250px; /* Max height to prevent overflow */
+        }
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 250px; /* Keep consistent height for larger screens */
+            }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800">
+
+    <div class="container mx-auto p-4 sm:p-6 md:p-8 max-w-7xl">
+
+        <!-- Header -->
+        <header class="text-center mb-8">
+            <h1 class="text-3xl md:text-4xl font-bold text-slate-900">Your Personalized Nutrition Plan</h1>
+            <p class="text-slate-600 mt-2">Track your daily intake, explore meal options, and stay on target for your goals.</p>
+        </header>
+
+        <!-- Main Dashboard -->
+        <main>
+            <!-- Section 1: At a Glance Dashboard -->
+            <section id="dashboard" class="mb-8 p-6 bg-white rounded-xl shadow-md">
+                <h2 class="text-2xl font-bold mb-4 text-slate-700">Daily Dashboard</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+
+                    <!-- Personal Details & Target Calculator -->
+                    <div class="bg-slate-100 p-4 rounded-lg md:col-span-2 lg:col-span-2">
+                        <h3 class="font-semibold text-slate-600 mb-3">Personal Details & Target Calculator</h3>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label for="age-input" class="block text-sm font-medium text-slate-700">Age (years)</label>
+                                <input type="number" id="age-input" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 sm:text-sm p-2" value="42">
+                            </div>
+                            <div>
+                                <label for="weight-input" class="block text-sm font-medium text-slate-700">Weight (kg)</label>
+                                <input type="number" id="weight-input" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 sm:text-sm p-2" value="67.2" step="0.1">
+                            </div>
+                            <div class="flex items-end gap-2">
+                                <div>
+                                    <label for="height-ft-input" class="block text-sm font-medium text-slate-700">Height (ft)</label>
+                                    <input type="number" id="height-ft-input" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 sm:text-sm p-2" value="5">
+                                </div>
+                                <div>
+                                    <label for="height-in-input" class="block text-sm font-medium text-slate-700">Height (in)</label>
+                                    <input type="number" id="height-in-input" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 sm:text-sm p-2" value="5">
+                                </div>
+                            </div>
+                            <div>
+                                <label for="activity-level-select" class="block text-sm font-medium text-slate-700">Activity Level</label>
+                                <select id="activity-level-select" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 sm:text-sm p-2">
+                                    <option value="1.2">Sedentary (little or no exercise)</option>
+                                    <option value="1.375">Lightly active (1-3 days/week)</option>
+                                    <option value="1.55" selected>Moderately active (3-5 days/week)</option>
+                                    <option value="1.725">Very active (6-7 days/week)</option>
+                                    <option value="1.9">Extra active (very hard exercise/physical job)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <button id="calculate-targets-btn" class="mt-4 w-full bg-amber-500 text-white font-semibold py-2 rounded-lg hover:bg-amber-600 transition-colors">Calculate Targets</button>
+                        <div class="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800">
+                            <h4 class="font-semibold text-sm">Weekly Weight Loss Projection: <span id="weekly-loss-projection" class="font-bold">0 kg</span></h4>
+                            <p class="text-xs text-slate-600">Based on a 500 kcal daily deficit.</p>
+                        </div>
+                    </div>
+
+                    <!-- Target & Progress Cards -->
+                    <div class="bg-slate-100 p-4 rounded-lg">
+                        <h3 class="font-semibold text-slate-600">Calorie Target</h3>
+                        <p class="text-3xl font-bold text-amber-500" id="display-calorie-target">1900 <span class="text-lg text-slate-500">kcal</span></p>
+                        <div class="mt-4">
+                            <div class="flex justify-between mb-1">
+                                <span class="text-sm font-medium text-slate-700">Progress</span>
+                                <span id="calories-text" class="text-sm font-medium text-slate-700">0 / 1900 kcal</span>
+                            </div>
+                            <div class="w-full bg-slate-200 rounded-full h-2.5">
+                                <div id="calories-progress" class="bg-amber-500 h-2.5 rounded-full progress-bar-fill" style="width: 0%"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-slate-100 p-4 rounded-lg">
+                        <h3 class="font-semibold text-slate-600">Protein Target</h3>
+                        <p class="text-3xl font-bold text-sky-500" id="display-protein-target">135 <span class="text-lg text-slate-500">g</span></p>
+                        <div class="mt-4">
+                            <div class="flex justify-between mb-1">
+                                <span class="text-sm font-medium text-slate-700">Progress</span>
+                                <span id="protein-text" class="text-sm font-medium text-slate-700">0 / 135 g</span>
+                            </div>
+                            <div class="w-full bg-slate-200 rounded-full h-2.5">
+                                <div id="protein-progress" class="bg-sky-500 h-2.5 rounded-full progress-bar-fill" style="width: 0%"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Macro Breakdown Chart (now for individual meals) -->
+                    <div class="md:col-span-2 lg:col-span-1 bg-slate-100 p-4 rounded-lg flex flex-col items-center justify-center">
+                        <h3 class="font-semibold text-slate-600 mb-2" id="macro-chart-title">Meal Macro Breakdown</h3>
+                        <div class="chart-container">
+                            <canvas id="macroChart"></canvas>
+                        </div>
+                        <p id="chart-meal-name" class="text-sm text-slate-500 mt-2 text-center"></p>
+                    </div>
+                </div>
+                <div class="mt-6 text-center">
+                    <button id="sweet-treat-btn" class="px-6 py-3 bg-fuchsia-500 text-white font-semibold rounded-lg hover:bg-fuchsia-600 transition-colors shadow-md">✨ Suggest a Sweet Treat ✨</button>
+                    <div id="sweet-treat-output" class="mt-4 p-4 bg-fuchsia-50 border border-fuchsia-200 rounded-lg text-fuchsia-800 hidden"></div>
+                </div>
+            </section>
+            
+            <!-- Section 2: Meal Planner -->
+            <section id="meal-planner" class="mb-8">
+                <div class="flex flex-col sm:flex-row justify-between items-center mb-6">
+                    <h2 class="text-2xl font-bold text-slate-700 mb-4 sm:mb-0">Weekly Meal Plan</h2>
+                    <button id="reset-day" class="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors">Reset Day</button>
+                </div>
+
+                <!-- Day Selector -->
+                <div id="day-selector" class="flex flex-wrap gap-2 justify-center mb-6">
+                    <button data-day="Day 1" class="day-btn px-4 py-2 rounded-lg bg-white shadow-sm hover:bg-amber-100 transition-colors">Day 1</button>
+                    <button data-day="Day 2" class="day-btn px-4 py-2 rounded-lg bg-white shadow-sm hover:bg-amber-100 transition-colors">Day 2</button>
+                    <button data-day="Day 3" class="day-btn px-4 py-2 rounded-lg bg-white shadow-sm hover:bg-amber-100 transition-colors">Day 3</button>
+                    <button data-day="Day 4" class="day-btn px-4 py-2 rounded-lg bg-white shadow-sm hover:bg-amber-100 transition-colors">Day 4</button>
+                    <button data-day="Day 5" class="day-btn px-4 py-2 rounded-lg bg-white shadow-sm hover:bg-amber-100 transition-colors">Day 5</button>
+                    <button data-day="Day 6" class="day-btn px-4 py-2 rounded-lg bg-white shadow-sm hover:bg-amber-100 transition-colors">Day 6</button>
+                    <button data-day="Day 7" class="day-btn px-4 py-2 rounded-lg bg-white shadow-sm hover:bg-amber-100 transition-colors">Day 7</button>
+                </div>
+                
+                <!-- Meal Cards Container -->
+                <div id="meal-container" class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <!-- Meal cards will be dynamically inserted here -->
+                </div>
+
+                <div class="mt-8 text-center">
+                    <button id="new-meal-idea-btn" class="px-6 py-3 bg-blue-500 text-white font-semibold rounded-lg hover:bg-blue-600 transition-colors shadow-md">✨ Get a New Meal Idea ✨</button>
+                    <div id="new-meal-idea-output" class="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+                </div>
+            </section>
+
+            <!-- Section 3: Tactical Tips -->
+            <section id="tips" class="p-6 bg-white rounded-xl shadow-md">
+                <h2 class="text-2xl font-bold mb-4 text-slate-700">Tactical Tips for Eating Out</h2>
+                <div class="space-y-4">
+                    <div>
+                        <h3 class="font-semibold text-lg">Plan Ahead</h3>
+                        <p class="text-slate-600 mt-1">Check the menu online before you go. Look for grilled, steamed, or baked options. Knowing what you'll order helps avoid impulse choices.</p>
+                    </div>
+                    <div class="border-t border-slate-200 pt-4">
+                        <h3 class="font-semibold text-lg">Control Your Portions</h3>
+                        <p class="text-slate-600 mt-1">Restaurant portions are often oversized. Ask for a half-portion, share a main dish, or box up half your meal as soon as it arrives.</p>
+                    </div>
+                    <div class="border-t border-slate-200 pt-4">
+                        <h3 class="font-semibold text-lg">Be Sauce Savvy</h3>
+                        <p class="text-slate-600 mt-1">Creamy sauces, dressings, and gravies can add hundreds of calories. Ask for them on the side so you can control how much you use.</p>
+                    </div>
+                    <div class="border-t border-slate-200 pt-4">
+                        <h3 class="font-semibold text-lg">Smart Swaps</h3>
+                        <p class="text-slate-600 mt-1">Swap fries for a side salad or steamed vegetables. Choose whole grains like brown rice or whole wheat roti over white rice or plain naan.</p>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- Google AdSense Placeholder -->
+            <section class="mt-8 py-6 bg-slate-100 rounded-xl shadow-md text-center">
+                <h3 class="text-xl font-semibold text-slate-700 mb-4">Advertisement</h3>
+                <div class="flex justify-center">
+                    <ins class="adsbygoogle"
+                        style="display:block; text-align:center;"
+                        data-ad-client="YOUR_CA_PUB_ID"
+                        data-ad-slot="YOUR_AD_SLOT_ID"></ins>
+                </div>
+                <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=YOUR_CA_PUB_ID" crossorigin="anonymous"></script>
+                <script>
+                    (adsbygoogle = window.adsbygoogle || []).push({});
+                </script>
+            </section>
+
+        </main>
+    </div>
+
+    <script>
+        const mealData = {
+            "Day 1": {
+                "Breakfast": [
+                    { name: "Scrambled Eggs & Toast", cals: 365, p: 27, c: 23, f: 21, ingredients: "3 large eggs, 1 cup spinach, 1 slice whole wheat toast, 1 tsp olive oil. Sauté spinach, scramble eggs, and serve with toast." },
+                    { name: "Besan Cheela", cals: 315, p: 17, c: 48, f: 9, ingredients: "1/2 cup besan, 1/4 cup chopped onion, 1/4 cup grated carrots, cilantro, spices. Mix into a batter and pan-fry." }
+                ],
+                "Lunch": [
+                    { name: "Quick Chicken Curry", cals: 425, p: 38, c: 45, f: 13, ingredients: "150g chicken, 1 cup mixed veggies, 1/2 cup low-fat curry sauce, 1/2 cup brown rice." },
+                    { name: "Masoor Dal & Salad", cals: 365, p: 26, c: 53, f: 7, ingredients: "1/2 cup red lentils cooked with onion, tomato, and spices. Served with a large side salad." }
+                ],
+                "Dinner": [
+                    { name: "Baked Salmon & Veggies", cals: 465, p: 33, c: 23, f: 30, ingredients: "150g salmon fillet, 1 cup mixed vegetables (broccoli, bell peppers), 1 tbsp olive oil. Baked at 400°F." },
+                    { name: "Keema with Roti", cals: 500, p: 38, c: 43, f: 22, ingredients: "150g lean ground beef/chicken, onion, tomato, spices, peas. Served with 2 small whole wheat rotis." }
+                ]
+            },
+            "Day 2": {
+                 "Breakfast": [
+                    { name: "Greek Yogurt & Berries", cals: 265, p: 23, c: 28, f: 9, ingredients: "1 cup plain Greek yogurt, 1/2 cup mixed berries, 1 tbsp chopped almonds." },
+                    { name: "Egg Bhurji on Toast", cals: 295, p: 17, c: 28, f: 17, ingredients: "2 eggs scrambled with onion, tomato, chili. Served on 1 slice of whole wheat toast." }
+                ],
+                "Lunch": [
+                    { name: "Chicken & Chickpea Salad", cals: 365, p: 38, c: 33, f: 11, ingredients: "150g cooked chicken, 1/2 cup chickpeas, 2 cups mixed greens, cucumber, tomatoes, light vinaigrette." },
+                    { name: "Vegetable Pulao & Raita", cals: 415, p: 17, c: 73, f: 9, ingredients: "1 cup cooked brown rice with mixed vegetables. Side of 1/2 cup yogurt raita." }
+                ],
+                "Dinner": [
+                    { name: "Beef Stir-fry", cals: 525, p: 38, c: 48, f: 22, ingredients: "150g lean beef strips, 2 cups stir-fry veggies, 1 tbsp soy sauce, served with 1/2 cup brown rice." },
+                    { name: "Rajma with Roti", cals: 465, p: 23, c: 73, f: 11, ingredients: "1 cup kidney bean curry served with 2 small whole wheat rotis." }
+                ]
+            },
+            "Day 3": {
+                "Breakfast": [
+                    { name: "Protein Oatmeal", cals: 365, p: 28, c: 48, f: 6, ingredients: "1/2 cup rolled oats, 1 scoop protein powder, 1/2 cup berries." },
+                    { name: "Vegetable Poha", cals: 315, p: 9, c: 58, f: 9, ingredients: "1 cup flattened rice, 1/2 cup mixed veggies, onion, spices." }
+                ],
+                "Lunch": [
+                    { name: "Chicken & Hummus Wrap", cals: 400, p: 33, c: 38, f: 16, ingredients: "1 large whole wheat tortilla, 100g chicken, 2 tbsp hummus, mixed greens." },
+                    { name: "Mulligatawny Soup", cals: 335, p: 28, c: 33, f: 6, ingredients: "1/2 cup red lentils, 100g chicken, carrots, celery, broth, curry powder." }
+                ],
+                "Dinner": [
+                    { name: "Grilled Chicken & Greens", cals: 415, p: 48, c: 13, f: 21, ingredients: "150g grilled chicken breast, 2 cups steamed broccoli with 1 tbsp olive oil." },
+                    { name:
+"Palak Paneer & Roti", cals: 525, p: 28, c: 48, f: 30, ingredients: "200g spinach, 100g paneer, cooked in a light tomato-onion sauce. Served with 2 small whole wheat rotis." }
+                ]
+            },
+            "Day 4": {
+                "Breakfast": [
+                    { name: "Cottage Cheese & Avocado Toast", cals: 315, p: 21, c: 28, f: 16, ingredients: "1 slice whole wheat toast, 1/2 cup cottage cheese, 1/4 avocado." },
+                    { name: "Vegetable Upma", cals: 335, p: 9, c: 63, f: 9, ingredients: "1/2 cup semolina (sooji), mixed vegetables, onion, spices." }
+                ],
+                "Lunch": [
+                    { name: "Tuna Salad Lettuce Wraps", cals: 300, p: 28, c: 13, f: 14, ingredients: "1 can tuna, 2 tbsp Greek yogurt, celery, red onion, in large lettuce leaves." },
+                    { name: "Seekh Kebab & Salad", cals: 425, p: 38, c: 18, f: 22, ingredients: "150g lean minced chicken/beef kebabs (baked), mint chutney, large side salad." }
+                ],
+                "Dinner": [
+                    { name: "Turkey Chili", cals: 475, p: 43, c: 48, f: 17, ingredients: "150g ground turkey, 1 can tomatoes, 1 can kidney beans, onion, pepper, spices." },
+                    { name: "Aloo Gobi with Roti", cals: 400, p: 11, c: 63, f: 11, ingredients: "1 cup cauliflower, 1 small potato cooked in spices, with 1 small whole wheat roti." }
+                ]
+            },
+            "Day 5": {
+                "Breakfast": [
+                    { name: "Spinach & Protein Smoothie", cals: 315, p: 28, c: 33, f: 9, ingredients: "1 scoop protein powder, 1 cup almond milk, 1 cup spinach, 1/2 banana, 1 tbsp chia seeds." },
+                    { name: "Mixed Lentil Adai", cals: 365, p: 17, c: 48, f: 16, ingredients: "Mixed lentil & rice flour pancake with onions & carrots. Served with coconut chutney." }
+                ],
+                "Lunch": [
+                    { name: "Leftover Dinner", cals: 450, p: 35, c: 40, f: 18, ingredients: "Use leftovers from the previous day's dinner for a quick and easy meal." },
+                    { name: "Chana Masala with Roti", cals: 415, p: 17, c: 63, f: 11, ingredients: "1 cup chickpea curry, served with 1 small whole wheat roti." }
+                ],
+                "Dinner": [
+                    { name: "Chicken & Veggie Pita Pizza", cals: 425, p: 33, c: 43, f: 16, ingredients: "1 whole wheat pita, tomato paste, 50g chicken, veggies, low-fat mozzarella." },
+                    { name: "Tandoori Chicken & Salad", cals: 425, p: 43, c: 13, f: 22, ingredients: "150g tandoori chicken (baked), large side salad with light dressing." }
+                ]
+            },
+            "Day 6": {
+                "Breakfast": [
+                    { name: "Veggie Omelette & Toast", cals: 365, p: 21, c: 28, f: 21, ingredients: "3 eggs, 1/2 cup mixed veggies, 1 tsp olive oil, 1 slice whole wheat toast." },
+                    { name: "Fruit Chaat", cals: 200, p: 2, c: 48, f: 1, ingredients: "1 cup mixed fruits (apple, banana, grapes) with chaat masala and lemon juice." }
+                ],
+                "Lunch": [
+                    { name: "Roast Beef Sandwich", cals: 375, p: 28, c: 38, f: 13, ingredients: "100g lean roast beef, 2 slices whole wheat bread, lettuce, tomato, mustard." },
+                    { name: "Dahi Bhalla (Baked)", cals: 325, p: 20, c: 43, f: 6, ingredients: "Baked lentil dumplings in yogurt with mint and tamarind chutney." }
+                ],
+                "Dinner": [
+                    { name: "Hearty Lentil Soup", cals: 475, p: 33, c: 73, f: 6, ingredients: "Large bowl of mixed lentil soup with vegetables, served with 1 slice whole wheat bread." },
+                    { name: "Lean Chicken Biryani", cals: 575, p: 43, c: 63, f: 22, ingredients: "150g chicken, 1 cup brown rice, layered with spices and yogurt. Served with raita." }
+                ]
+            },
+            "Day 7": {
+                "Breakfast": [
+                    { name: "Cereal with Milk & Fruit", cals: 265, p: 11, c: 48, f: 6, ingredients: "1 cup whole wheat cereal, 1 cup almond milk, 1/2 banana." },
+                    { name: "Moong Dal Cheela", cals: 315, p: 17, c: 43, f: 9, ingredients: "Soaked moong dal pancake with carrots and cilantro. Served with green chutney." }
+                ],
+                "Lunch": [
+                    { name: "Leftovers / Meal Prep", cals: 450, p: 35, c: 40, f: 18, ingredients: "Use leftovers or a pre-prepared meal for convenience." },
+                    { name: "Tomato & Cottage Cheese Salad", cals: 265, p: 17, c: 13, f: 19, ingredients: "1 large tomato, 1/2 cucumber, 1/2 cup cottage cheese, 1 tbsp olive oil." }
+                ],
+                "Dinner": [
+                    { name: "Roast Chicken & Veggies", cals: 465, p: 43, c: 33, f: 16, ingredients: "150g roast chicken breast (skinless), 1 cup roasted root vegetables." },
+                    { name: "Saag Gosht with Roti", cals: 575, p: 38, c: 48, f: 28, ingredients: "150g lean lamb, 200g spinach, cooked in a light gravy. Served with 2 small whole wheat rotis." }
+                ]
+            }
+        };
+
+        const targets = {
+            calories: 1900,
+            protein: 135,
+            carbs: 178,
+            fat: 79
+        };
+
+        let currentTotals = {
+            calories: 0,
+            protein: 0,
+            carbs: 0,
+            fat: 0
+        };
+        
+        let currentDay = "Day 1";
+        let macroChart;
+
+        const daySelector = document.getElementById('day-selector');
+        const mealContainer = document.getElementById('meal-container');
+        const resetButton = document.getElementById('reset-day');
+        const newMealIdeaBtn = document.getElementById('new-meal-idea-btn');
+        const newMealIdeaOutput = document.getElementById('new-meal-idea-output');
+        const sweetTreatBtn = document.getElementById('sweet-treat-btn');
+        const sweetTreatOutput = document.getElementById('sweet-treat-output');
+        const chartMealName = document.getElementById('chart-meal-name');
+
+        const ageInput = document.getElementById('age-input');
+        const weightInput = document.getElementById('weight-input');
+        const heightFtInput = document.getElementById('height-ft-input');
+        const heightInInput = document.getElementById('height-in-input');
+        const activityLevelSelect = document.getElementById('activity-level-select');
+        const calculateTargetsBtn = document.getElementById('calculate-targets-btn');
+        const displayCalorieTarget = document.getElementById('display-calorie-target');
+        const displayProteinTarget = document.getElementById('display-protein-target');
+        const weeklyLossProjection = document.getElementById('weekly-loss-projection');
+
+        function createMealCard(mealType, meal) {
+            const card = document.createElement('div');
+            card.className = "bg-white p-5 rounded-lg shadow-sm flex flex-col cursor-pointer hover:shadow-lg transition-shadow";
+            card.dataset.mealCals = meal.cals;
+            card.dataset.mealP = meal.p;
+            card.dataset.mealC = meal.c;
+            card.dataset.mealF = meal.f;
+            card.dataset.mealName = meal.name;
+
+            card.innerHTML = `
+                <h4 class="text-lg font-bold text-slate-800">${meal.name}</h4>
+                <p class="text-sm text-slate-500 mt-1 flex-grow">${meal.ingredients}</p>
+                <div class="mt-4 text-xs text-slate-600 grid grid-cols-4 gap-2 text-center">
+                    <div><span class="font-bold">${meal.cals}</span><br>kcal</div>
+                    <div><span class="font-bold">${meal.p}g</span><br>Protein</div>
+                    <div><span class="font-bold">${meal.c}g</span><br>Carbs</div>
+                    <div><span class="font-bold">${meal.f}g</span><br>Fat</div>
+                </div>
+                <button class="add-meal-btn mt-4 w-full bg-amber-500 text-white font-semibold py-2 rounded-lg hover:bg-amber-600 transition-colors" data-cals="${meal.cals}" data-p="${meal.p}" data-c="${meal.c}" data-f="${meal.f}">Add to Log</button>
+            `;
+
+            card.addEventListener('click', (e) => {
+                // Only update chart if the click wasn't on the "Add to Log" button
+                if (!e.target.classList.contains('add-meal-btn')) {
+                    updateMealRadarChart({
+                        p: parseFloat(card.dataset.mealP),
+                        c: parseFloat(card.dataset.mealC),
+                        f: parseFloat(card.dataset.mealF),
+                        name: card.dataset.mealName
+                    });
+                }
+            });
+
+            return card;
+        }
+
+        function displayMealsForDay(day) {
+            mealContainer.innerHTML = '';
+            currentDay = day;
+
+            const dayData = mealData[day];
+            for (const mealType in dayData) {
+                const mealTypeContainer = document.createElement('div');
+                mealTypeContainer.innerHTML = `<h3 class="text-xl font-semibold mb-3 text-slate-700">${mealType}</h3>`;
+                const mealOptionsContainer = document.createElement('div');
+                mealOptionsContainer.className = "space-y-4";
+                
+                dayData[mealType].forEach(meal => {
+                    mealOptionsContainer.appendChild(createMealCard(mealType, meal));
+                });
+                
+                mealTypeContainer.appendChild(mealOptionsContainer);
+                mealContainer.appendChild(mealTypeContainer);
+            }
+            
+            document.querySelectorAll('.day-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.day === day);
+            });
+            
+            document.querySelectorAll('.add-meal-btn').forEach(button => {
+                button.addEventListener('click', logMeal);
+            });
+
+            // Update radar chart with the first meal of the day by default
+            if (dayData && Object.keys(dayData).length > 0) {
+                const firstMealType = Object.keys(dayData)[0];
+                if (dayData[firstMealType] && dayData[firstMealType].length > 0) {
+                    updateMealRadarChart(dayData[firstMealType][0]);
+                }
+            } else {
+                updateMealRadarChart({p: 0, c: 0, f: 0, name: "No Meal Selected"});
+            }
+        }
+
+        function logMeal(event) {
+            const button = event.target;
+            const mealCals = parseInt(button.dataset.cals);
+            const mealP = parseInt(button.dataset.p);
+            const mealC = parseInt(button.dataset.c);
+            const mealF = parseInt(button.dataset.f);
+            const mealName = button.closest('.bg-white').dataset.mealName;
+
+            currentTotals.calories += mealCals;
+            currentTotals.protein += mealP;
+            currentTotals.carbs += mealC;
+            currentTotals.fat += mealF;
+            
+            button.textContent = "Added ✓";
+            button.disabled = true;
+            button.classList.remove('bg-amber-500', 'hover:bg-amber-600');
+            button.classList.add('bg-green-500', 'cursor-not-allowed');
+
+            updateDashboard();
+            updateMealRadarChart({p: mealP, c: mealC, f: mealF, name: mealName}); // Show the logged meal's macros
+        }
+        
+        function updateDashboard() {
+            const calPercent = Math.min(100, (currentTotals.calories / targets.calories) * 100);
+            document.getElementById('calories-progress').style.width = `${calPercent}%`;
+            document.getElementById('calories-text').textContent = `${currentTotals.calories} / ${targets.calories} kcal`;
+
+            const proPercent = Math.min(100, (currentTotals.protein / targets.protein) * 100);
+            document.getElementById('protein-progress').style.width = `${proPercent}%`;
+            document.getElementById('protein-text').textContent = `${currentTotals.protein} / ${targets.protein} g`;
+        }
+
+        function updateMealRadarChart(meal) {
+            macroChart.data.datasets[0].data = [meal.p, meal.c, meal.f];
+            chartMealName.textContent = meal.name;
+            macroChart.update();
+        }
+        
+        function resetDay() {
+            currentTotals = { calories: 0, protein: 0, carbs: 0, fat: 0 };
+            displayMealsForDay(currentDay);
+            updateDashboard();
+            newMealIdeaOutput.innerHTML = '';
+            sweetTreatOutput.classList.add('hidden');
+            sweetTreatOutput.textContent = '';
+        }
+
+        async function getNewMealIdea() {
+            newMealIdeaBtn.disabled = true;
+            newMealIdeaBtn.textContent = "Generating...";
+            newMealIdeaOutput.innerHTML = '';
+
+            const prompt = "Suggest a new, quick, high-protein, halal, South Asian-inspired meal idea suitable for fat loss, using ingredients common in Toronto, Canada. Provide the meal name, brief ingredients/instructions, and estimated calories, protein, carbs, and fat in a concise format (e.g., 'Meal Name: X kcal, Yg P, Zg C, Wg F. Ingredients: ... Instructions: ...').";
+            let chatHistory = [];
+            chatHistory.push({ role: "user", parts: [{ text: prompt }] });
+            const payload = { contents: chatHistory };
+            const apiKey = "";
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+
+                if (result.candidates && result.candidates.length > 0 &&
+                    result.candidates[0].content && result.candidates[0].content.parts &&
+                    result.candidates[0].content.parts.length > 0) {
+                    const text = result.candidates[0].content.parts[0].text;
+                    const mealRegex = /Meal Name: (.*?)\s*(\d+) kcal, (\d+)g P, (\d+)g C, (\d+)g F\.\s*Ingredients: (.*?)\s*Instructions: (.*)/s;
+                    const match = text.match(mealRegex);
+
+                    if (match) {
+                        const name = match[1].trim();
+                        const cals = parseInt(match[2]);
+                        const p = parseInt(match[3]);
+                        const c = parseInt(match[4]);
+                        const f = parseInt(match[5]);
+                        const ingredients = match[6].trim();
+                        const instructions = match[7].trim();
+
+                        const generatedMeal = { name, cals, p, c, f, ingredients: `${ingredients} Instructions: ${instructions}` };
+                        const card = createMealCard("Generated Meal", generatedMeal);
+                        card.classList.add('bg-blue-50', 'border', 'border-blue-200');
+                        newMealIdeaOutput.appendChild(card);
+                    } else {
+                        newMealIdeaOutput.innerHTML = `<div class="p-4 bg-red-100 text-red-800 rounded-lg">Could not parse meal idea. Raw response: ${text}</div>`;
+                    }
+                } else {
+                    newMealIdeaOutput.innerHTML = `<div class="p-4 bg-red-100 text-red-800 rounded-lg">Failed to get a meal idea. Please try again.</div>`;
+                }
+            } catch (error) {
+                newMealIdeaOutput.innerHTML = `<div class="p-4 bg-red-100 text-red-800 rounded-lg">Error generating meal idea: ${error.message}</div>`;
+            } finally {
+                newMealIdeaBtn.disabled = false;
+                newMealIdeaBtn.textContent = "✨ Get a New Meal Idea ✨";
+            }
+        }
+
+        async function suggestSweetTreat() {
+            sweetTreatBtn.disabled = true;
+            sweetTreatBtn.textContent = "Generating...";
+            sweetTreatOutput.classList.add('hidden');
+            sweetTreatOutput.textContent = '';
+
+            const prompt = "Suggest a small, calorie-conscious (under 200 kcal), halal sweet treat idea suitable for someone on a fat loss journey, with a South Asian twist if possible. Provide just the treat name and a very brief description.";
+            let chatHistory = [];
+            chatHistory.push({ role: "user", parts: [{ text: prompt }] });
+            const payload = { contents: chatHistory };
+            const apiKey = "";
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+
+                if (result.candidates && result.candidates.length > 0 &&
+                    result.candidates[0].content && result.candidates[0].content.parts &&
+                    result.candidates[0].content.parts.length > 0) {
+                    const text = result.candidates[0].content.parts[0].text;
+                    sweetTreatOutput.textContent = text;
+                    sweetTreatOutput.classList.remove('hidden');
+                } else {
+                    sweetTreatOutput.textContent = "Failed to get a sweet treat idea. Please try again.";
+                    sweetTreatOutput.classList.remove('hidden');
+                    sweetTreatOutput.classList.remove('bg-fuchsia-50');
+                    sweetTreatOutput.classList.add('bg-red-100', 'text-red-800');
+                }
+            } catch (error) {
+                sweetTreatOutput.textContent = `Error suggesting treat: ${error.message}`;
+                sweetTreatOutput.classList.remove('hidden');
+                sweetTreatOutput.classList.remove('bg-fuchsia-50');
+                sweetTreatOutput.classList.add('bg-red-100', 'text-red-800');
+            } finally {
+                sweetTreatBtn.disabled = false;
+                sweetTreatBtn.textContent = "✨ Suggest a Sweet Treat ✨";
+            }
+        }
+
+        function calculateTDEE() {
+            const age = parseFloat(ageInput.value);
+            const weight = parseFloat(weightInput.value); // kg
+            const heightFt = parseFloat(heightFtInput.value);
+            const heightIn = parseFloat(heightInInput.value);
+            const activityFactor = parseFloat(activityLevelSelect.value);
+
+            if (isNaN(age) || isNaN(weight) || isNaN(heightFt) || isNaN(heightIn) || isNaN(activityFactor) || age <= 0 || weight <= 0 || heightFt <= 0) {
+                alert("Please enter valid positive numbers for all personal details.");
+                return;
+            }
+
+            const heightCm = (heightFt * 30.48) + (heightIn * 2.54);
+
+            // Mifflin-St Jeor Equation for Men
+            const bmr = (10 * weight) + (6.25 * heightCm) - (5 * age) + 5;
+            const tdee = bmr * activityFactor;
+
+            // Target for fat loss (500 kcal deficit)
+            const fatLossCalorieTarget = Math.round(tdee - 500);
+
+            // Update global targets object
+            targets.calories = fatLossCalorieTarget;
+            
+            // Recalculate protein, carbs, fat based on new calorie target
+            // Maintain original protein target (135g) if possible, then split remaining calories
+            const proteinCals = targets.protein * 4;
+            let remainingCals = targets.calories - proteinCals;
+
+            // Ensure remainingCals is not negative
+            if (remainingCals < 0) {
+                targets.protein = Math.round(targets.calories / 4); // Adjust protein if target calories are too low
+                remainingCals = 0;
+            }
+
+            // Distribute remaining calories (e.g., 50% carbs, 50% fat of remaining)
+            targets.carbs = Math.round((remainingCals * 0.5) / 4);
+            targets.fat = Math.round((remainingCals * 0.5) / 9);
+
+            // Update UI
+            displayCalorieTarget.textContent = `${targets.calories} kcal`;
+            displayProteinTarget.textContent = `${targets.protein} g`;
+            
+            // Weekly weight loss projection (1 kg fat = ~7700 kcal)
+            const weeklyDeficit = 500 * 7;
+            const weeklyLossKg = (weeklyDeficit / 7700).toFixed(2); // kg
+            weeklyLossProjection.textContent = `${weeklyLossKg} kg`;
+
+            updateDashboard(); // Update progress bars and chart with new targets
+        }
+
+        function initializeChart() {
+            const ctx = document.getElementById('macroChart').getContext('2d');
+            macroChart = new Chart(ctx, {
+                type: 'radar', // Changed to radar chart
+                data: {
+                    labels: ['Protein (g)', 'Carbs (g)', 'Fat (g)'], // Labels for radar axes
+                    datasets: [{
+                        label: 'Meal Macros',
+                        data: [0, 0, 0], // Initial data for a meal
+                        backgroundColor: 'rgba(56, 189, 248, 0.2)', // Light blue fill
+                        borderColor: '#38bdf8', // Blue border
+                        pointBackgroundColor: '#38bdf8',
+                        pointBorderColor: '#fff',
+                        pointHoverBackgroundColor: '#fff',
+                        pointHoverBorderColor: '#38bdf8',
+                        borderWidth: 2,
+                        fill: true // Fill the area
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        r: {
+                            beginAtZero: true,
+                            suggestedMin: 0, // Minimum value for the scale
+                            suggestedMax: 80, // Adjust this max value based on typical meal macros
+                            angleLines: {
+                                color: '#cbd5e1' // Light grey angle lines
+                            },
+                            grid: {
+                                color: '#cbd5e1' // Light grey grid lines
+                            },
+                            pointLabels: {
+                                font: {
+                                    size: 14,
+                                    weight: 'bold'
+                                },
+                                color: '#475569' // Darker grey for point labels
+                            },
+                            ticks: {
+                                display: false // Hide numerical ticks on the scale
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false // Hide legend as we'll show meal name below chart
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    if (context.parsed.r !== null) {
+                                        label = `${context.label}: ${context.parsed.r}g`;
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeChart();
+            calculateTDEE(); // Calculate initial targets on load
+            displayMealsForDay(currentDay);
+            updateDashboard();
+
+            daySelector.addEventListener('click', (e) => {
+                if (e.target.classList.contains('day-btn')) {
+                    const selectedDay = e.target.dataset.day;
+                    if(selectedDay !== currentDay) {
+                        resetDay();
+                        displayMealsForDay(selectedDay);
+                    }
+                }
+            });
+            
+            resetButton.addEventListener('click', resetDay);
+            newMealIdeaBtn.addEventListener('click', getNewMealIdea);
+            sweetTreatBtn.addEventListener('click', suggestSweetTreat);
+            calculateTargetsBtn.addEventListener('click', calculateTDEE);
+        });
+
+    </script>
+</body>
+</html>
+
+"initial commit of nutrition app - Adnan"
